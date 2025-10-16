@@ -20,7 +20,7 @@ final class NetworkManager {
     
     
     // MARK: Searching GIFs
-    func searchGifs(with name: String, limit: Int = 15, offset: Int = 0 ) async throws -> [GifData] {
+    func searchGifs(with name: String, limit: Int = 15, offset: Int = 0 ) async throws -> GifPage {
         print("I'm in Network Manager")
         guard !apiKey.isEmpty else { throw NetworkError.wrongAPI }
         print("Succesfull API")
@@ -43,11 +43,12 @@ final class NetworkManager {
         print("Response OK")
         do {
             let dto = try decoder.decode(GiphySearchResponse.self, from: data)
-            return dto.data
+            return GifPage(items: dto.data, pagination: dto.pagination)
             
         } catch {
             print(String(data: data, encoding: .utf8) ?? "")
             throw NetworkError.invalidData
         }
     }
+    
 }

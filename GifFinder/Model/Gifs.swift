@@ -72,6 +72,10 @@ struct Pagination: Decodable {
         case offset
     }
 }
+struct GifPage {
+    let items: [GifData]
+    let pagination: Pagination
+}
 
 
 // MARK: GifData extension

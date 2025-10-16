@@ -10,8 +10,6 @@ import Combine
 
 final class GifListViewController: UIViewController {
     
-    
-    
     enum Section: Int, CaseIterable {
         case gifList
     }
@@ -24,21 +22,21 @@ final class GifListViewController: UIViewController {
 
     private lazy var collectionView = UICollectionView()
     
+    private var overlaySpinner = UIActivityIndicatorView(style: .medium)
+    
 
     override func viewDidLoad() {
         super.viewDidLoad()
         
         view.backgroundColor = .red
+        searchBarSetup()
         setupCollectionView()
         configureDataSource()
         bind()
-        viewModel.fetchGifs()
         
     }
-    // MARK: Methods
-    
-
 }
+// MARK: Methods
 
 // MARK: CollectionView setup, delegate
 
@@ -48,6 +46,7 @@ extension GifListViewController: UICollectionViewDelegate {
         collectionView = UICollectionView(frame: view.bounds, collectionViewLayout: createCompositionalLayout())
         collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         collectionView.backgroundColor = .white
+        collectionView.keyboardDismissMode = .onDrag
         view.addSubview(collectionView)
         
         collectionView.register(GifCell.self, forCellWithReuseIdentifier: GifCell.reuseId)
@@ -55,6 +54,7 @@ extension GifListViewController: UICollectionViewDelegate {
         collectionView.delegate = self
         
     }
+    
     private func createCompositionalLayout() -> UICollectionViewCompositionalLayout {
         let layout = UICollectionViewCompositionalLayout { (sectionIndex, layoutEnvironment) -> NSCollectionLayoutSection? in
             guard let section = Section(rawValue: sectionIndex) else { fatalError() }
@@ -78,17 +78,13 @@ extension GifListViewController: UICollectionViewDelegate {
             layoutSize: .init(widthDimension: .fractionalWidth(1.0),
                               heightDimension: .absolute(140)),
             subitem: item,
-            count: 3
-        )
+            count: 3)
         
         let section = NSCollectionLayoutSection(group: group)
         section.orthogonalScrollingBehavior = .none
         section.contentInsets = .init(top: 8, leading: 16, bottom: 16, trailing: 16)
         section.interGroupSpacing = 12
         return section
-        
-        
-                                                       
     }
 }
 // MARK: Data Source
@@ -115,14 +111,56 @@ extension GifListViewController {
         dataSource = UICollectionViewDiffableDataSource<Section, GifData>(collectionView: collectionView) { [weak self] collectionView, indexPath, gif in
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: GifCell.reuseId, for: indexPath) as! GifCell
             cell.configure(with: gif)
-            cell.backgroundConfiguration = UIBackgroundConfiguration.listCell()
+            
             return cell
         }
     }
 }
 
-import SwiftUI
+// MARK: Search bar
 
+extension GifListViewController: UISearchBarDelegate, UISearchResultsUpdating {
+    
+    private func searchBarSetup() {
+        
+        let searchController = UISearchController(searchResultsController: nil)
+        
+        navigationItem.searchController = searchController
+        navigationItem.hidesSearchBarWhenScrolling = false
+        searchController.hidesNavigationBarDuringPresentation = false
+        searchController.obscuresBackgroundDuringPresentation = false
+        
+        searchController.searchBar.delegate = self
+        searchController.searchBar.placeholder = "Search GIFs"
+        searchController.searchBar.autocapitalizationType = .none
+        searchController.searchBar.autocorrectionType = .no
+        
+        searchController.searchResultsUpdater = self
+        definesPresentationContext = true
+    }
+    
+    func updateSearchResults(for searchController: UISearchController) {
+        
+        viewModel.query = searchController.searchBar.text ?? ""
+    }
+    func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
+        viewModel.query = ""
+    }
+    
+}
+
+// MARK: Spinner
+
+extension GifListViewController {
+    
+    
+}
+
+
+
+// MARK: Simulator
+
+import SwiftUI
 
 struct GifListVCProvider: PreviewProvider {
     

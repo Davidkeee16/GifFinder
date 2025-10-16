@@ -11,22 +11,124 @@ import Combine
 
 
 final class GifViewModel {
-    // MARK: Properties
-    @Published var gifs: [GifData] = []
-   
+    
+    // MARK: Input
+    @Published var query: String = ""
+    
+    // MARK: Output
+    
+    @Published private(set) var gifs: [GifData] = []
+    @Published private(set) var isLoading = false
+    @Published private(set) var isLoadingMore = false
+    @Published private(set) var error: NetworkError?
+    
+    
+    private var bag = Set<AnyCancellable>()
+    private var searchTask: Task<Void, Never>?
+    
+    
+    // MARK: Pagination
+    private var currentQuery: String = ""
+    private var offset: Int = 0
+    private var limit: Int = 20
+    private var totalCount: Int = .max
+    
+    private var canLoadMore: Bool {
+        offset < totalCount
+    }
+    
+    
+    
+    init() {
+        bindSearch()
+    }
+    
     // MARK: Methods
     // MARK: Get GIFs list
     
-    func fetchGifs() {
-        Task {
+    
+    private func bindSearch() {
+        $query
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .removeDuplicates()
+            .debounce(for: .milliseconds(350), scheduler: RunLoop.main)
+            .sink { [weak self] text in
+                     self?.startNewSearch(for: text)
+            }
+            .store(in: &bag)
+    }
+    
+    private func startNewSearch(for text: String) {
+        
+        searchTask?.cancel()
+        
+        searchTask = Task { [weak self] in
+            guard let self else { return }
+            
+            currentQuery = text.isEmpty ? "trending" : text
+            offset = 0
+            totalCount = .max
+            
+            
+            
+            await MainActor.run {
+                self.isLoading = true
+                self.isLoadingMore = false
+                self.error = nil
+                self.gifs = []
+            }
             do {
-                let gifs = try await NetworkManager.shared.searchGifs(with: "sun")
-                self.gifs = gifs
+                
+                let result = try await NetworkManager.shared.searchGifs(with: currentQuery, limit: limit, offset: offset)
+                
+                await MainActor.run {
+                    self.gifs = result.items
+                    self.totalCount = result.pagination.totalCount
+                    self.offset = result.pagination.offset + result.pagination.count
+                    self.isLoading = false
+                }
             } catch {
-                if let error = error as? NetworkError {
-                    print(error)
+                await MainActor.run {
+                    self.isLoading = false
+                    self.error = error as? NetworkError ?? .invalidData
                 }
             }
         }
     }
+    
+    func loadNextPageIfNeeded(visibleIndex: Int) {
+        guard canLoadMore, !isLoading, !isLoadingMore else { return }
+        
+        if visibleIndex >= gifs.count - 10 {
+            loadMore()
+        }
+    }
+    private func loadMore() {
+        searchTask?.cancel()
+        searchTask = Task { [weak self] in
+            guard let self else { return }
+            
+            await MainActor.run { self.isLoadingMore = true }
+            
+            do {
+                let page = try await NetworkManager.shared.searchGifs(with: currentQuery, limit: limit, offset: offset)
+                
+                await MainActor.run {
+                    self.gifs.append(contentsOf: page.items)
+                    self.totalCount = page.pagination.totalCount
+                    self.offset = page.pagination.offset + page.pagination.count
+                    self.isLoadingMore = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLoadingMore = false
+                    self.error = error as? NetworkError ?? .invalidData
+                }
+            }
+        }
+    }
+    
+    deinit { searchTask?.cancel() }
+    
+    
 }
