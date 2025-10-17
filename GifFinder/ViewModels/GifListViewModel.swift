@@ -30,14 +30,13 @@ final class GifViewModel {
     // MARK: Pagination
     private var currentQuery: String = ""
     private var offset: Int = 0
-    private var limit: Int = 20
+    private var limit: Int = 10
     private var totalCount: Int = .max
     
     private var canLoadMore: Bool {
         offset < totalCount
     }
-    
-    
+    private var seenIDs = Set<String>()
     
     init() {
         bindSearch()
@@ -68,8 +67,7 @@ final class GifViewModel {
             currentQuery = text.isEmpty ? "trending" : text
             offset = 0
             totalCount = .max
-            
-            
+            seenIDs.removeAll()
             
             await MainActor.run {
                 self.isLoading = true
@@ -77,15 +75,21 @@ final class GifViewModel {
                 self.error = nil
                 self.gifs = []
             }
+            
             do {
                 
                 let result = try await NetworkManager.shared.searchGifs(with: currentQuery, limit: limit, offset: offset)
                 
+                if Task.isCancelled { return }
+                
                 await MainActor.run {
-                    self.gifs = result.items
+                    
                     self.totalCount = result.pagination.totalCount
                     self.offset = result.pagination.offset + result.pagination.count
                     self.isLoading = false
+                    self.appendUnique(result.items)
+                    
+                    
                 }
             } catch {
                 await MainActor.run {
@@ -114,10 +118,11 @@ final class GifViewModel {
                 let page = try await NetworkManager.shared.searchGifs(with: currentQuery, limit: limit, offset: offset)
                 
                 await MainActor.run {
-                    self.gifs.append(contentsOf: page.items)
+                    
                     self.totalCount = page.pagination.totalCount
                     self.offset = page.pagination.offset + page.pagination.count
                     self.isLoadingMore = false
+                    self.appendUnique(page.items)
                 }
             } catch {
                 await MainActor.run {
@@ -126,6 +131,10 @@ final class GifViewModel {
                 }
             }
         }
+    }
+    func appendUnique(_ newItems: [GifData]) {
+        let unique = newItems.filter { self.seenIDs.insert($0.id).inserted }
+        self.gifs.append(contentsOf: unique)
     }
     
     deinit { searchTask?.cancel() }

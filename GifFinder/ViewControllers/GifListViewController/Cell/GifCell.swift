@@ -14,8 +14,7 @@ class GifCell: UICollectionViewCell, SelfConfigureCell {
     static var reuseId = "gifCell"
     
     let gifImage = UIImageView()
-    
-    
+
     // MARK: Methods
     
     func configure<C>(with value: C) where C : Hashable {
@@ -56,10 +55,6 @@ class GifCell: UICollectionViewCell, SelfConfigureCell {
         gifImage.clipsToBounds = true
         
         addSubview(gifImage)
-        
-        
-        
-        
         
         NSLayoutConstraint.activate([
             gifImage.topAnchor.constraint(equalTo: self.topAnchor),

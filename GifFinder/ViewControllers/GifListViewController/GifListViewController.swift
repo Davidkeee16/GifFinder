@@ -22,18 +22,18 @@ final class GifListViewController: UIViewController {
 
     private lazy var collectionView = UICollectionView()
     
-    private var overlaySpinner = UIActivityIndicatorView(style: .medium)
+    private var overlaySpinner = UIActivityIndicatorView(style: .large)
     
 
     override func viewDidLoad() {
         super.viewDidLoad()
         
         view.backgroundColor = .red
-        searchBarSetup()
         setupCollectionView()
         configureDataSource()
+        searchBarSetup()
+        setupSpinnerConstraints()
         bind()
-        
     }
 }
 // MARK: Methods
@@ -51,10 +51,14 @@ extension GifListViewController: UICollectionViewDelegate {
         
         collectionView.register(GifCell.self, forCellWithReuseIdentifier: GifCell.reuseId)
         
+        collectionView.register(LoadingFooterView.self, forSupplementaryViewOfKind: UICollectionView.elementKindSectionFooter, withReuseIdentifier: LoadingFooterView.reuseId)
+        
         collectionView.delegate = self
         
     }
-    
+    func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+        viewModel.loadNextPageIfNeeded(visibleIndex: indexPath.item)
+    }
     private func createCompositionalLayout() -> UICollectionViewCompositionalLayout {
         let layout = UICollectionViewCompositionalLayout { (sectionIndex, layoutEnvironment) -> NSCollectionLayoutSection? in
             guard let section = Section(rawValue: sectionIndex) else { fatalError() }
@@ -84,6 +88,10 @@ extension GifListViewController: UICollectionViewDelegate {
         section.orthogonalScrollingBehavior = .none
         section.contentInsets = .init(top: 8, leading: 16, bottom: 16, trailing: 16)
         section.interGroupSpacing = 12
+        
+        let footer = NSCollectionLayoutBoundarySupplementaryItem(layoutSize: .init(widthDimension: .fractionalWidth(1.0), heightDimension: .estimated(56)), elementKind: UICollectionView.elementKindSectionFooter, alignment: .bottom)
+        
+        section.boundarySupplementaryItems = [footer]
         return section
     }
 }
@@ -95,11 +103,32 @@ extension GifListViewController {
         viewModel.$gifs
             .receive(on: RunLoop.main)
             .sink { [weak self] gifs in
+                print("GIF Count = \(gifs.count)")
                 guard let self else { return }
                 var snapshot = NSDiffableDataSourceSnapshot<Section, GifData>()
                 snapshot.appendSections([.gifList])
                 snapshot.appendItems(gifs, toSection: .gifList)
                 self.dataSource.apply(snapshot, animatingDifferences: true)
+            }
+            .store(in: &cancellables)
+        
+        viewModel.$isLoading
+
+            .receive(on: RunLoop.main)
+            .sink { [weak self] loading in
+                guard let self else { return }
+                loading ? self.overlaySpinner.startAnimating() : self.overlaySpinner.stopAnimating()
+            }
+            .store(in: &cancellables)
+        
+        viewModel.$isLoadingMore
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                let snapshot = self.dataSource.snapshot()
+                if snapshot.sectionIdentifiers.contains(.gifList) {
+                    self.dataSource.apply(snapshot, animatingDifferences: false)
+                }
             }
             .store(in: &cancellables)
     }
@@ -113,6 +142,15 @@ extension GifListViewController {
             cell.configure(with: gif)
             
             return cell
+        }
+        dataSource.supplementaryViewProvider = { [weak self] collectionView, kind, indexPath in
+            guard kind == UICollectionView.elementKindSectionFooter,
+            let footer = collectionView.dequeueReusableSupplementaryView(ofKind: kind, withReuseIdentifier: LoadingFooterView.reuseId, for: indexPath) as? LoadingFooterView,
+            let isLoadingMore = self?.viewModel.isLoadingMore else { return nil }
+            
+            footer.setLoading(isLoadingMore)
+            
+            return footer
         }
     }
 }
@@ -153,10 +191,19 @@ extension GifListViewController: UISearchBarDelegate, UISearchResultsUpdating {
 
 extension GifListViewController {
     
-    
+    private func setupSpinnerConstraints() {
+        overlaySpinner.hidesWhenStopped = true
+        overlaySpinner.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(overlaySpinner)
+        
+        NSLayoutConstraint.activate([
+            overlaySpinner.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            overlaySpinner.centerXAnchor.constraint(equalTo: view.centerXAnchor)
+        ])
+    }
 }
 
-
+/*
 
 // MARK: Simulator
 
@@ -177,3 +224,4 @@ struct GifListVCProvider: PreviewProvider {
         }
     }
 }
+*/
