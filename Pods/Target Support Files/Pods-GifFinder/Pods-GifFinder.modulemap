@@ -1,0 +1,6 @@
+framework module Pods_GifFinder {
+  umbrella header "Pods-GifFinder-umbrella.h"
+
+  export *
+  module * { export * }
+}
